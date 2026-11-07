@@ -1,0 +1,258 @@
+<Window x:Class="WiredViewer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="wired.viewer" Width="1200" Height="760" MinWidth="820" MinHeight="520"
+        WindowStyle="None" Background="#090D12" AllowDrop="True"
+        FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="10" Foreground="{DynamicResource Silver}"
+        TextOptions.TextFormattingMode="Display" UseLayoutRounding="True"
+        PreviewKeyDown="OnKey" Drop="OnDrop" StateChanged="OnState">
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
+  </shell:WindowChrome.WindowChrome>
+
+  <Window.Resources>
+    <SolidColorBrush x:Key="Ice" Color="#BFD6E4"/>
+    <SolidColorBrush x:Key="Off" Color="#E4ECF0"/>
+    <SolidColorBrush x:Key="Silver" Color="#8FA0AD"/>
+    <SolidColorBrush x:Key="Dim" Color="#55646F"/>
+    <SolidColorBrush x:Key="Line" Color="#222E38"/>
+    <SolidColorBrush x:Key="Crt" Color="#7CFFB2"/>
+    <SolidColorBrush x:Key="Bar" Color="#0B1016"/>
+
+    <!-- 2x2 dither used as divider texture -->
+    <DrawingBrush x:Key="Dither" TileMode="Tile" Viewport="0,0,4,4" ViewportUnits="Absolute" Viewbox="0,0,4,4" ViewboxUnits="Absolute">
+      <DrawingBrush.Drawing>
+        <GeometryDrawing Brush="#34444F">
+          <GeometryDrawing.Geometry>
+            <GeometryGroup><RectangleGeometry Rect="0,0,1,1"/><RectangleGeometry Rect="2,2,1,1"/></GeometryGroup>
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+    <!-- scanlines -->
+    <DrawingBrush x:Key="Scan" TileMode="Tile" Viewport="0,0,3,3" ViewportUnits="Absolute" Viewbox="0,0,3,3" ViewboxUnits="Absolute">
+      <DrawingBrush.Drawing>
+        <GeometryDrawing Brush="#000000"><GeometryDrawing.Geometry><RectangleGeometry Rect="0,2,3,1"/></GeometryDrawing.Geometry></GeometryDrawing>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+
+    <Style x:Key="Glyph" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Silver}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="Transparent" Padding="10,6">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#1A2630"/>
+                <Setter Property="Foreground" Value="{StaticResource Crt}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="Arrow" TargetType="Button" BasedOn="{StaticResource Glyph}">
+      <Setter Property="FontSize" Value="34"/>
+      <Setter Property="FontFamily" Value="Segoe UI Light"/>
+      <Setter Property="Opacity" Value="0.25"/>
+      <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="1"/></Trigger></Style.Triggers>
+    </Style>
+
+    <Style x:Key="ThumbItem" TargetType="ListBoxItem">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="bd" Margin="8,0,8,7" BorderThickness="1" BorderBrush="{StaticResource Line}" Height="74" Cursor="Hand">
+              <Grid>
+                <ContentPresenter/>
+                <Border x:Name="veil" Background="#0A0F14" Opacity="0.5" IsHitTestVisible="False"/>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions><BeginStoryboard><Storyboard>
+                  <DoubleAnimation Storyboard.TargetName="veil" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2"/>
+                </Storyboard></BeginStoryboard></Trigger.EnterActions>
+                <Trigger.ExitActions><BeginStoryboard><Storyboard>
+                  <DoubleAnimation Storyboard.TargetName="veil" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:0:0.45"/>
+                </Storyboard></BeginStoryboard></Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Ice}"/>
+                <Setter TargetName="veil" Property="Visibility" Value="Collapsed"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid x:Name="Root">
+    <Grid x:Name="Main">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <!-- top bar -->
+      <Border x:Name="TopBar" Grid.Row="0" Height="34" Background="{StaticResource Bar}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1"
+              MouseLeftButtonDown="OnTitleDown">
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
+            <TextBlock Text="◈" Foreground="{StaticResource Crt}" FontSize="12" Margin="0,0,10,0"/>
+            <TextBlock Text="wired.viewer" Foreground="{StaticResource Off}" FontSize="12"/>
+            <TextBlock Text="  rev 0.7 / layer 07" Foreground="{StaticResource Dim}"/>
+          </StackPanel>
+          <TextBlock x:Name="PathText" Grid.Column="1" Text="no archive mounted" Foreground="{StaticResource Dim}"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="12,0"/>
+          <StackPanel Grid.Column="2" Orientation="Horizontal">
+            <TextBlock x:Name="Clock" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <Button Content="open" Style="{StaticResource Glyph}" Click="OnOpen"/>
+            <Button Content="─" Style="{StaticResource Glyph}" Click="OnMin"/>
+            <Button Content="▢" Style="{StaticResource Glyph}" Click="OnMax"/>
+            <Button Content="✕" Style="{StaticResource Glyph}" Click="OnClose"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- body -->
+      <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- index -->
+        <DockPanel x:Name="LeftPanel" Width="156" Background="#0C1218">
+          <Border DockPanel.Dock="Right" Width="1" Background="{StaticResource Line}"/>
+          <StackPanel DockPanel.Dock="Top" Margin="10,10,10,8">
+            <TextBlock Text="index" Foreground="{StaticResource Ice}"/>
+            <TextBlock x:Name="IndexCount" Text="0 nodes" Foreground="{StaticResource Dim}" Margin="0,2,0,8"/>
+            <Rectangle Height="4" Fill="{StaticResource Dither}"/>
+          </StackPanel>
+          <ListBox x:Name="Thumbs" Background="Transparent" BorderThickness="0" Focusable="False"
+                   ItemContainerStyle="{StaticResource ThumbItem}" ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="OnPick">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Grid>
+                  <Image Source="{Binding Thumb}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                  <Border Background="#B0080C10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Padding="4,1">
+                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource Ice}" FontSize="9"/>
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+
+        <!-- viewport -->
+        <Grid x:Name="ViewPort" Grid.Column="1" Background="#080C10" ClipToBounds="True" Cursor="None"
+              MouseWheel="OnWheel" MouseLeftButtonDown="OnDown" MouseLeftButtonUp="OnUp" MouseMove="OnMove"
+              MouseLeave="OnLeave" SizeChanged="OnViewSize">
+          <Canvas x:Name="Stage"><Image x:Name="Img" Stretch="Fill" Opacity="0" RenderTransformOrigin="0.5,0.5"/></Canvas>
+
+          <StackPanel x:Name="Empty" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+            <TextBlock Text="no signal" FontFamily="Segoe UI Light" FontSize="34" Foreground="{StaticResource Ice}" HorizontalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+              <TextBlock Text="drop a folder here, or press O"/>
+              <TextBlock Text="▮" Foreground="{StaticResource Crt}" Margin="6,0,0,0">
+                <TextBlock.Triggers><EventTrigger RoutedEvent="FrameworkElement.Loaded"><BeginStoryboard><Storyboard>
+                  <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0" Duration="0:0:0.7" AutoReverse="True" RepeatBehavior="Forever"/>
+                </Storyboard></BeginStoryboard></EventTrigger></TextBlock.Triggers>
+              </TextBlock>
+            </StackPanel>
+          </StackPanel>
+
+          <TextBlock Text="┌" FontSize="18" Foreground="{StaticResource Dim}" Margin="12,6" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False"/>
+          <TextBlock Text="┐" FontSize="18" Foreground="{StaticResource Dim}" Margin="12,6" HorizontalAlignment="Right" VerticalAlignment="Top" IsHitTestVisible="False"/>
+          <TextBlock Text="└" FontSize="18" Foreground="{StaticResource Dim}" Margin="12,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
+          <TextBlock Text="┘" FontSize="18" Foreground="{StaticResource Dim}" Margin="12,6" HorizontalAlignment="Right" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
+
+          <TextBlock x:Name="CoordText" Text="x ----  y ----" Foreground="{StaticResource Crt}" Opacity="0.7" Margin="40,0,0,16"
+                     HorizontalAlignment="Left" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
+          <TextBlock x:Name="ZoomText" Text="" Foreground="{StaticResource Ice}" Margin="0,0,40,16"
+                     HorizontalAlignment="Right" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
+
+          <Button Content="‹" Style="{StaticResource Arrow}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,0" Click="OnPrev"/>
+          <Button Content="›" Style="{StaticResource Arrow}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" Click="OnNext"/>
+
+          <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14" Background="#D80B1016"
+                  BorderBrush="{StaticResource Line}" BorderThickness="1" Cursor="Arrow">
+            <StackPanel Orientation="Horizontal">
+              <Button Content="−" Style="{StaticResource Glyph}" Click="OnZoomOut"/>
+              <Button Content="+" Style="{StaticResource Glyph}" Click="OnZoomIn"/>
+              <Button Content="fit" Style="{StaticResource Glyph}" Click="OnFit"/>
+              <Button Content="1:1" Style="{StaticResource Glyph}" Click="OnActual"/>
+              <Rectangle Width="1" Fill="{StaticResource Line}" Margin="2,6"/>
+              <Button Content="↺" Style="{StaticResource Glyph}" Click="OnRotL"/>
+              <Button Content="↻" Style="{StaticResource Glyph}" Click="OnRotR"/>
+              <Rectangle Width="1" Fill="{StaticResource Line}" Margin="2,6"/>
+              <Button Content="export" Style="{StaticResource Glyph}" Click="OnExport"/>
+              <Button Content="full" Style="{StaticResource Glyph}" Click="OnFull"/>
+            </StackPanel>
+          </Border>
+
+          <Canvas IsHitTestVisible="False">
+            <Path x:Name="Reticle" Visibility="Collapsed" Stroke="{StaticResource Crt}" StrokeThickness="1" Opacity="0.85"
+                  Data="M-11,0 H-4 M4,0 H11 M0,-11 V-4 M0,4 V11 M-1,0 H1">
+              <Path.RenderTransform><TranslateTransform x:Name="RetT"/></Path.RenderTransform>
+            </Path>
+          </Canvas>
+        </Grid>
+
+        <!-- record -->
+        <DockPanel x:Name="RightPanel" Grid.Column="2" Width="236" Background="#0C1218">
+          <Border DockPanel.Dock="Left" Width="1" Background="{StaticResource Line}"/>
+          <StackPanel DockPanel.Dock="Top" Margin="14,10,14,0">
+            <TextBlock Text="archive record" Foreground="{StaticResource Ice}"/>
+            <Rectangle Height="4" Fill="{StaticResource Dither}" Margin="0,8,0,0"/>
+          </StackPanel>
+          <StackPanel DockPanel.Dock="Bottom" Margin="14,0,14,12">
+            <Rectangle Height="4" Fill="{StaticResource Dither}" Margin="0,0,0,8"/>
+            <TextBlock Text="system" Foreground="{StaticResource Dim}" Margin="0,0,0,4"/>
+            <TextBlock x:Name="LogText" Foreground="{StaticResource Crt}" Opacity="0.6" FontSize="9" TextWrapping="Wrap"/>
+          </StackPanel>
+          <StackPanel x:Name="Meta" Margin="14,0"/>
+        </DockPanel>
+      </Grid>
+
+      <!-- status -->
+      <Border x:Name="StatusBar" Grid.Row="2" Height="24" Background="{StaticResource Bar}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+        <Grid Margin="14,0">
+          <TextBlock x:Name="StatusMsg" Foreground="{StaticResource Crt}" VerticalAlignment="Center" Text="signal stable. nobody is watching."/>
+          <TextBlock Foreground="{StaticResource Dim}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                     Text="O open   ← → move   wheel zoom   R rotate   F fit   S export   Tab hide ui   F11 full"/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- atmosphere: none of this takes the mouse -->
+    <Rectangle IsHitTestVisible="False" Fill="{StaticResource Scan}" Opacity="0.22"/>
+    <Rectangle x:Name="Roll" IsHitTestVisible="False" Height="170" VerticalAlignment="Top">
+      <Rectangle.Fill>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+          <GradientStop Color="#00BFD6E4" Offset="0"/><GradientStop Color="#0FBFD6E4" Offset="0.55"/><GradientStop Color="#00BFD6E4" Offset="1"/>
+        </LinearGradientBrush>
+      </Rectangle.Fill>
+      <Rectangle.RenderTransform><TranslateTransform x:Name="RollT" Y="-200"/></Rectangle.RenderTransform>
+      <Rectangle.Triggers><EventTrigger RoutedEvent="FrameworkElement.Loaded"><BeginStoryboard><Storyboard>
+        <DoubleAnimation Storyboard.TargetName="RollT" Storyboard.TargetProperty="Y" From="-200" To="1500" Duration="0:0:11" RepeatBehavior="Forever"/>
+      </Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+    </Rectangle>
+    <Rectangle x:Name="Grain" IsHitTestVisible="False" Opacity="0.07"/>
+    <Rectangle IsHitTestVisible="False">
+      <Rectangle.Fill>
+        <RadialGradientBrush RadiusX="0.85" RadiusY="0.85">
+          <GradientStop Color="#00000000" Offset="0.6"/><GradientStop Color="#B0030508" Offset="1"/>
+        </RadialGradientBrush>
+      </Rectangle.Fill>
+    </Rectangle>
+  </Grid>
+</Window>
